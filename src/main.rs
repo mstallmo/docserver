@@ -11,6 +11,7 @@ use std::fs;
 use std::io::{BufRead, Cursor, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
+use std::string::FromUtf8Error;
 use std::sync::{Arc, RwLock};
 
 #[derive(Debug, Parser)]
@@ -185,7 +186,19 @@ fn handle_request(ctx: Arc<RwLock<Context>>, handlers: Handlers, request: Reques
 
 fn file(ctx: Arc<RwLock<Context>>, request: Request) -> Vec<u8> {
     println!("request target: {}", request.target());
-    let mut file_path = request.target().split('/').skip(1).collect::<PathBuf>();
+    let mut file_path = match request
+        .target()
+        .split('/')
+        .skip(1)
+        .map(|elem| urlencoding::decode(elem).and_then(|data| Ok(data.to_string())))
+        .collect::<Result<PathBuf, FromUtf8Error>>()
+    {
+        Ok(file_path) => file_path,
+        Err(err) => {
+            eprintln!("{err}");
+            return Response::new(StatusCode::InternalServerError).into();
+        }
+    };
 
     println!("relative file path: {}", file_path.display());
     if file_path.file_name().is_none() {
