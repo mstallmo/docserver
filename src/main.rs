@@ -168,10 +168,6 @@ fn handle_request(ctx: Arc<RwLock<Context>>, handlers: Handlers, request: Reques
         .collect::<Vec<String>>();
 
     for ((method, pattern), handler) in &(*handlers.read().unwrap()) {
-        if pattern.len() != target.len() {
-            continue;
-        }
-
         let target_matches = pattern.iter().zip(target.iter()).all(|(p, t)| {
             // `:` is the placeholder for a dynamic segment
             if p.starts_with(":") { true } else { p == t }
@@ -188,30 +184,28 @@ fn handle_request(ctx: Arc<RwLock<Context>>, handlers: Handlers, request: Reques
 }
 
 fn file(ctx: Arc<RwLock<Context>>, request: Request) -> Vec<u8> {
-    let mut file_name = request
-        .target()
-        .split('/')
-        .next_back()
-        .unwrap_or_default()
-        .trim();
+    println!("request target: {}", request.target());
+    let mut file_path = request.target().split('/').skip(1).collect::<PathBuf>();
 
-    if file_name.is_empty() {
-        file_name = "index.html";
+    println!("relative file path: {}", file_path.display());
+    if file_path.file_name().is_none() {
+        file_path.set_file_name("index.html");
     }
+    println!("serving file path {}", file_path.display());
 
     let Some(file_dir) = &ctx.read().unwrap().file_dir else {
         return Response::new(StatusCode::NotFound).into();
     };
 
-    let file_path = file_dir.join(file_name);
-    let Ok(exists) = fs::exists(&file_path) else {
+    let resolved_path = file_dir.join(file_path);
+    let Ok(exists) = fs::exists(&resolved_path) else {
         return Response::new(StatusCode::NotFound).into();
     };
 
     if exists {
-        let mut file = fs::File::open(&file_path).unwrap();
+        let mut file = fs::File::open(&resolved_path).unwrap();
 
-        if file_path.extension() == Some(OsStr::new("html")) {
+        if resolved_path.extension() == Some(OsStr::new("html")) {
             let mut content = String::new();
             file.read_to_string(&mut content).unwrap();
 
