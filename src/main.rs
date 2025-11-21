@@ -225,6 +225,11 @@ fn file(ctx: Arc<RwLock<Context>>, request: Request) -> Vec<u8> {
             Response::new(StatusCode::Ok)
                 .with_body(Html(content))
                 .into()
+        } else if resolved_path.extension() == Some(OsStr::new("svg")) {
+            let mut content = String::new();
+            file.read_to_string(&mut content).unwrap();
+
+            Response::new(StatusCode::Ok).with_body(Svg(content)).into()
         } else {
             let mut buffer = Vec::new();
             file.read_to_end(&mut buffer).unwrap();
@@ -374,6 +379,22 @@ struct Html(String);
 impl ResponseBody for Html {
     fn content_type(&self) -> &str {
         "text/html"
+    }
+
+    fn content_length(&self) -> usize {
+        self.0.len()
+    }
+
+    fn to_bytes(self) -> Vec<u8> {
+        self.0.as_bytes().to_vec()
+    }
+}
+
+struct Svg(String);
+
+impl ResponseBody for Svg {
+    fn content_type(&self) -> &str {
+        "image/svg+xml"
     }
 
     fn content_length(&self) -> usize {
