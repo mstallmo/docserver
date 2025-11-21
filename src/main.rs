@@ -5,7 +5,6 @@ use clap::Parser;
 use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fs;
 use std::io::{BufRead, Cursor, Read, Write};
@@ -218,23 +217,39 @@ fn file(ctx: Arc<RwLock<Context>>, request: Request) -> Vec<u8> {
     if exists {
         let mut file = fs::File::open(&resolved_path).unwrap();
 
-        if resolved_path.extension() == Some(OsStr::new("html")) {
-            let mut content = String::new();
-            file.read_to_string(&mut content).unwrap();
+        match resolved_path.extension().and_then(|ext| ext.to_str()) {
+            Some("html") => {
+                let mut content = String::new();
+                file.read_to_string(&mut content).unwrap();
 
-            Response::new(StatusCode::Ok)
-                .with_body(Html(content))
-                .into()
-        } else if resolved_path.extension() == Some(OsStr::new("svg")) {
-            let mut content = String::new();
-            file.read_to_string(&mut content).unwrap();
+                Response::new(StatusCode::Ok)
+                    .with_body(Html(content))
+                    .into()
+            }
+            Some("css") => {
+                let mut content = String::new();
+                file.read_to_string(&mut content).unwrap();
 
-            Response::new(StatusCode::Ok).with_body(Svg(content)).into()
-        } else {
-            let mut buffer = Vec::new();
-            file.read_to_end(&mut buffer).unwrap();
+                Response::new(StatusCode::Ok).with_body(Css(content)).into()
+            }
+            Some("js") => {
+                let mut content = String::new();
+                file.read_to_string(&mut content).unwrap();
 
-            Response::new(StatusCode::Ok).with_body(buffer).into()
+                Response::new(StatusCode::Ok).with_body(Js(content)).into()
+            }
+            Some("svg") => {
+                let mut content = String::new();
+                file.read_to_string(&mut content).unwrap();
+
+                Response::new(StatusCode::Ok).with_body(Svg(content)).into()
+            }
+            _ => {
+                let mut buffer = Vec::new();
+                file.read_to_end(&mut buffer).unwrap();
+
+                Response::new(StatusCode::Ok).with_body(buffer).into()
+            }
         }
     } else {
         Response::new(StatusCode::NotFound).into()
@@ -390,6 +405,41 @@ impl ResponseBody for Html {
     }
 }
 
+#[repr(transparent)]
+struct Css(String);
+
+impl ResponseBody for Css {
+    fn content_type(&self) -> &str {
+        "text/css"
+    }
+
+    fn content_length(&self) -> usize {
+        self.0.len()
+    }
+
+    fn to_bytes(self) -> Vec<u8> {
+        self.0.as_bytes().to_vec()
+    }
+}
+
+#[repr(transparent)]
+struct Js(String);
+
+impl ResponseBody for Js {
+    fn content_type(&self) -> &str {
+        "text/javascript"
+    }
+
+    fn content_length(&self) -> usize {
+        self.0.len()
+    }
+
+    fn to_bytes(self) -> Vec<u8> {
+        self.0.as_bytes().to_vec()
+    }
+}
+
+#[repr(transparent)]
 struct Svg(String);
 
 impl ResponseBody for Svg {
